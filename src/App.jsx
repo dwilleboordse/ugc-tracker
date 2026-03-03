@@ -148,11 +148,11 @@ async function fetchData() {
   }
 }
 
-async function persistData(newData, pin) {
+async function persistData(newData) {
   try {
     const res = await fetch("/api/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-manager-pin": pin },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newData),
     });
     return res.ok;
@@ -217,43 +217,7 @@ function ClientView({ client, concepts }) {
   );
 }
 
-function PinScreen({ onAuth }) {
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const submit = async () => {
-    if (!pin.trim()) return;
-    setChecking(true); setError(false);
-    try {
-      const data = await fetchData();
-      const res = await fetch("/api/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-manager-pin": pin.trim() },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) { sessionStorage.setItem("ugc-pin", pin.trim()); onAuth(pin.trim()); }
-      else setError(true);
-    } catch (e) { setError(true); }
-    setChecking(false);
-  };
-  return (
-    <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans }}>
-      <div style={{ width: 360, padding: 40 }}>
-        <div style={{ fontFamily: mono, fontSize: 10, color: T.accent, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 8 }}>D-DOUBLEU MEDIA</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: T.text, marginBottom: 4 }}>UGC Tracker</div>
-        <div style={{ fontFamily: mono, fontSize: 12, color: T.textDim, marginBottom: 32 }}>Enter manager PIN to continue</div>
-        <input type="password" value={pin} onChange={e => { setPin(e.target.value); setError(false); }}
-          onKeyDown={e => e.key === "Enter" && submit()} placeholder="PIN"
-          style={{ fontFamily: mono, fontSize: 16, color: T.text, background: T.surface2, border: "1px solid " + (error ? T.issue : T.border), padding: "14px 18px", width: "100%", outline: "none", textAlign: "center", letterSpacing: "0.3em", marginBottom: 12 }} />
-        {error && <div style={{ fontFamily: mono, fontSize: 11, color: T.issue, textAlign: "center", marginBottom: 12 }}>Invalid PIN</div>}
-        <Btn accent fullWidth onClick={submit} disabled={checking || !pin.trim()}>{checking ? "Checking..." : "Enter"}</Btn>
-      </div>
-    </div>
-  );
-}
-
 export default function UGCTracker() {
-  const [pin, setPin] = useState(null);
   const [data, setData] = useState({ clients: [], concepts: [] });
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -278,15 +242,14 @@ export default function UGCTracker() {
   useEffect(() => {
     const hash = window.location.hash;
     if (hash.startsWith("#share/")) setShareView(hash.replace("#share/", ""));
-    else { const savedPin = sessionStorage.getItem("ugc-pin"); if (savedPin) setPin(savedPin); }
     const onHash = () => { const h = window.location.hash; if (h.startsWith("#share/")) setShareView(h.replace("#share/", "")); else setShareView(null); };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   useEffect(() => {
-    if (pin || shareView) fetchData().then(d => { setData(d); setLoaded(true); });
-  }, [pin, shareView]);
+    fetchData().then(d => { setData(d); setLoaded(true); });
+  }, []);
 
   useEffect(() => {
     if (!shareView) return;
@@ -296,9 +259,9 @@ export default function UGCTracker() {
 
   const save = useCallback(async (newData) => {
     setData(newData); setSaving(true);
-    await persistData(newData, pin);
+    await persistData(newData);
     setSaving(false);
-  }, [pin]);
+  }, []);
 
   const addClient = () => {
     if (!clientName.trim()) return;
@@ -331,19 +294,17 @@ export default function UGCTracker() {
   const quickStatus = (conceptId, newStatus) => { const updated = data.concepts.map(c => c.id === conceptId ? { ...c, status: newStatus } : c); save({ ...data, concepts: updated }); };
   const getShareUrl = (client) => window.location.origin + window.location.pathname + "#share/" + client.shareToken;
   const copyShareLink = (client) => { navigator.clipboard.writeText(getShareUrl(client)); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const logout = () => { sessionStorage.removeItem("ugc-pin"); setPin(null); };
 
   const fonts = <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />;
 
+  if (!loaded) return <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>{fonts}<div style={{ fontFamily: mono, fontSize: 12, color: T.textDim }}>Loading...</div></div>;
+
   if (shareView) {
-    if (!loaded) return <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>{fonts}<div style={{ fontFamily: mono, fontSize: 12, color: T.textDim }}>Loading...</div></div>;
     const client = data.clients.find(c => c.shareToken === shareView);
     if (!client) return <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>{fonts}<div style={{ textAlign: "center" }}><div style={{ fontFamily: sans, fontSize: 18, color: T.text, marginBottom: 8 }}>Link not found</div><div style={{ fontFamily: mono, fontSize: 12, color: T.textDim }}>This share link may have expired.</div></div></div>;
     const concepts = data.concepts.filter(c => c.clientId === client.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return <>{fonts}<ClientView client={client} concepts={concepts} /></>;
   }
-  if (!pin) return <>{fonts}<PinScreen onAuth={setPin} /></>;
-  if (!loaded) return <div style={{ background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>{fonts}<div style={{ fontFamily: mono, fontSize: 12, color: T.textDim }}>Loading...</div></div>;
 
   const clientConcepts_ = selectedClient ? data.concepts.filter(c => c.clientId === selectedClient.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
 
@@ -368,7 +329,6 @@ export default function UGCTracker() {
             </>
           )}
           {view === "clients" && <Btn small accent onClick={() => setShowNewClient(true)}>+ New Client</Btn>}
-          <Btn small outline onClick={logout}>Logout</Btn>
         </div>
       </div>
 
