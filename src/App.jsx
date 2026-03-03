@@ -155,10 +155,15 @@ async function persistData(newData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newData),
     });
-    return res.ok;
+    if (!res.ok) {
+      const err = await res.json();
+      console.error("Save failed:", err.error || err);
+      return err.error || "Save failed";
+    }
+    return null;
   } catch (e) {
     console.error("Save error:", e);
-    return false;
+    return "Cannot reach server";
   }
 }
 
@@ -237,6 +242,7 @@ export default function UGCTracker() {
   const [cTracking, setCTracking] = useState("");
   const [cStatus, setCStatus] = useState("pending");
   const [cNotes, setCNotes] = useState("");
+  const [saveError, setSaveError] = useState(null);
   const [shareView, setShareView] = useState(null);
 
   useEffect(() => {
@@ -258,8 +264,9 @@ export default function UGCTracker() {
   }, [shareView]);
 
   const save = useCallback(async (newData) => {
-    setData(newData); setSaving(true);
-    await persistData(newData);
+    setData(newData); setSaving(true); setSaveError(null);
+    const err = await persistData(newData);
+    if (err) setSaveError(err);
     setSaving(false);
   }, []);
 
@@ -331,6 +338,13 @@ export default function UGCTracker() {
           {view === "clients" && <Btn small accent onClick={() => setShowNewClient(true)}>+ New Client</Btn>}
         </div>
       </div>
+
+      {saveError && (
+        <div style={{ background: T.issueBg, borderBottom: "1px solid " + T.issue + "30", padding: "12px 28px", fontFamily: mono, fontSize: 12, color: T.issue }}>
+          Save failed: {saveError}
+          <button onClick={() => setSaveError(null)} style={{ marginLeft: 16, fontFamily: mono, fontSize: 11, color: T.issue, background: "none", border: "1px solid " + T.issue + "30", padding: "2px 8px", cursor: "pointer" }}>dismiss</button>
+        </div>
+      )}
 
       {view === "clients" && (
         <div style={{ padding: "24px 28px", maxWidth: 900, margin: "0 auto" }}>
